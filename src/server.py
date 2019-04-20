@@ -1,26 +1,42 @@
 import flask
-from protobrain import scientist
+import subprocess
+import tempfile
 from protobrain.proto import experiment_pb2
+from protobrain.util import proto_io
 
 
 app = flask.Flask(__name__)
 exp = experiment_pb2.Experiment()
-sc = scientist.Scientist()
 
 
-@app.route("/")
+@app.route('/')
 def index():
-    return "Hello"
+    return 'Hello'
+
 
 @app.route("/experiment", methods=['POST'])
 def experiment():
     exp.ParseFromString(flask.request.data)
-    hist = sc.run(exp)
-    return hist.SerializeToString()
+    with tempfile.NamedTemporaryFile('wb') as input_file:
+        with tempfile.NamedTemporaryFile('rb') as output_file:
+            input_file.write(exp.SerializeToString())
+            input_file.seek(0)
 
-@app.route("/ping")
+            subprocess.run(
+                ['python', 'protobrain-experiment', input_file.name, output_file.name]
+            )
+
+            output_file.seek(0)
+            reader = proto_io.ProtoReader(output_file, snapshot_pb2.Snapshot)
+            return [str(proto) for proto in reader]
+
+    return '[]'
+
+
+@app.route('/ping')
 def ping():
-    return ""
+    return ''
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     app.run()
